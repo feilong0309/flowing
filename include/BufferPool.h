@@ -36,6 +36,14 @@ namespace flowing {
               @return A pointer to the buffer. NULL if there are not remaining buffers.*/
             void* NextBuffer();
 
+            /** @brief Gets the maximum number of buffers.
+             *  @return The maximum number of buffers available.*/
+            int MaxNumBuffers();
+
+            /** @brief The number of free buffers.
+             *  @return The number of free buffers.*/
+            int NumFreeBuffers();
+
         public:
             int     m_NumBuffers; /**< @brief The number of buffers.*/
             int     m_BufferSize; /**< @brief The buffer size in bytes.*/

@@ -13,7 +13,8 @@
 */
 
 #include "BufferPool.h"
-#include <stdlib.h>
+#include <cstdlib>
+#include <cstring>
 
 namespace flowing {
 
@@ -29,7 +30,11 @@ namespace flowing {
     }
 
     bool BufferPool::Initialize() {
-       return  posix_memalign( &m_Buffers, m_NumBuffers*m_BufferSize, m_BufferSize ) == 0;
+//       posix_memalign( &m_Buffers, m_NumBuffers*m_BufferSize, m_BufferSize ) == 0;
+       m_Buffers = (void*)malloc(m_NumBuffers*m_BufferSize);
+       if(!m_Buffers) return false;
+       memset(m_Buffers, 0, m_NumBuffers*m_BufferSize );
+       return true;
     }
 
     void BufferPool::Close() {
@@ -37,6 +42,14 @@ namespace flowing {
     }
 
     void* BufferPool::NextBuffer() {
-        return m_Next<m_NumBuffers ? &m_Buffers[m_Next*m_BufferSize] : NULL;
+        return m_Next < m_NumBuffers ? (unsigned char*)(m_Buffers) + (m_Next++)*m_BufferSize : NULL;
+    }
+
+    int BufferPool::MaxNumBuffers() {
+        return m_NumBuffers;
+    }
+
+    int BufferPool::NumFreeBuffers() {
+        return m_NumBuffers - m_Next;
     }
 }

@@ -12,14 +12,16 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "Types.h"
 #include "StreamGraph.h"
 #include <cstdlib>
 
 namespace flowing {
-    AdjacencyPage* StreamGraph::AllocateAdjacencyPage( void* buffer, const int size ) {
+
+    StreamGraph::AdjacencyPage* StreamGraph::AllocateAdjacencyPage( void* buffer, const int size ) {
         AdjacencyPage* page = (AdjacencyPage*)malloc(sizeof(AdjacencyPage));
         if( page == NULL ) return NULL;
-        page->m_Buffer = buffer; 
+        page->m_Buffer = (unsigned int*)buffer; 
         page->m_NumAdjacencies = 0;
         page->m_MaxAdjacencies = size / sizeof(unsigned int);
         page->m_Next = NULL;
@@ -29,34 +31,63 @@ namespace flowing {
     }
 
     void StreamGraph::FreeAdjacencyPage( AdjacencyPage* page ) {
-
         if( page->m_Next != NULL ) {
             page->m_Next->m_Previous = NULL;
         }
-
         if( page->m_Previous != NULL ) {
             page->m_Previous->m_Next = NULL;
         }
-
         free(page);
     }
 
-    AdjacencyList* StreamGraph::AllocateAdjacencList() {
+    StreamGraph::AdjacencyList* StreamGraph::AllocateAdjacencyList() {
         AdjacencyList* list = (AdjacencyList*)malloc(sizeof(AdjacencyList));
         if( list == NULL ) return NULL;
         list->m_First = NULL;
-        list->m_Degree = NULL;  
+        list->m_Last = NULL;
+        list->m_Degree = 0;  
         return list;
     }
 
-    void StreamGraph::Free( AdjacencyList* adjacencyList ) {
-        free(list);
+    StreamGraph::AdjacencyIterator::AdjacencyIterator( const AdjacencyList* adjacencyList ) :
+            m_AdjacencyList( adjacencyList ) {
+            m_CurrentPage = m_AdjacencyList != NULL ? m_AdjacencyList->m_First : NULL;
+            m_CurrentIndex = 0;
     }
 
-    StreamGraph::StreamGraph( const EdgeMode mode ) :
+    StreamGraph::AdjacencyIterator::~AdjacencyIterator() {
+        
+    }
+
+    bool StreamGraph::AdjacencyIterator::HasNext() {
+       return   (m_AdjacencyList != NULL) &&
+                (m_CurrentPage != NULL) &&
+                (m_CurrentIndex < m_CurrentPage->m_NumAdjacencies);
+
+    }
+
+    unsigned int StreamGraph::AdjacencyIterator::Next() {
+        unsigned int retValue = m_CurrentPage->m_Buffer[m_CurrentIndex++];
+        if( m_CurrentIndex >= m_CurrentPage->m_NumAdjacencies ) {
+            m_CurrentIndex = 0;
+            m_CurrentPage = m_CurrentPage->m_Next;
+        }
+        return retValue;
+    }
+
+    void StreamGraph::FreeAdjacencyList( StreamGraph::AdjacencyList* adjacencyList ) {
+        free(adjacencyList);
+    }
+
+    StreamGraph::StreamGraph( const EdgeMode mode, void (*function)(Edge*,int), int batchSize  ) :
         m_BufferPool( FLOWING_NUM_PAGES, FLOWING_PAGE_SIZE ) {
         m_Mode = mode;
         m_NextId = 0;
+        m_NumPushedEdges = 0;
+        m_Processor = function;
+        m_BatchSize = batchSize > 0 ? batchSize : 1;
+        m_Batch = NULL;
+        m_NumInBatch = 0;
     }
 
     StreamGraph::~StreamGraph() {
@@ -64,11 +95,18 @@ namespace flowing {
     }
 
     bool StreamGraph::Initialize() {
+        m_Batch = (Edge*)malloc(sizeof(Edge)*m_BatchSize); 
         return m_BufferPool.Initialize();
     }
 
     void StreamGraph::Close() {
+        if(m_NumInBatch > 0) {
+            std::cout << "Processing batch ..." << std::endl;
+            m_Processor( m_Batch, m_NumInBatch);
+        }
+
         // FREE MEMORY
+        free(m_Batch);
         for( std::list<AdjacencyPage*>::iterator it = m_Pages.begin(); it != m_Pages.end(); ++it ) {
             FreeAdjacencyPage(*it);
         }
@@ -76,52 +114,72 @@ namespace flowing {
         for( int i = 0; i < m_Adjacencies.size(); ++i ) {
             FreeAdjacencyList(m_Adjacencies[i]);
         }
-
         m_BufferPool.Close();
     }
 
-    void StreamGraph::Push( std::ifstream& stream ) {
+    void StreamGraph::Push( std::istream& stream ) {
         unsigned int tail;
-        if( m_Mode == UNDIRECTED ) {
-            while( tail << stream ) {
-                unsigned int head;
-                head << stream;
-                PushUndirected(tail,head);
-            }
-        } else if( m_Mode == DIRECTED ) {
-            while( tail << stream ) {
-                unsigned int head;
-                head << stream;
-                PushDirected(tail,head);
-            }
+        while( stream >> tail ) {
+            unsigned int head;
+            stream >> head;
+            Push(tail,head);
         }
     }
 
     void StreamGraph::Push( const unsigned int tail, const unsigned int head, const double weight ) {
+        unsigned int internalTail = GetInternalId(tail);
+        unsigned int internalHead = GetInternalId(head);
         if( m_Mode == UNDIRECTED ) {
-            PushUndirected(tail,head);
+            PushUndirected(internalTail,internalHead);
         } else if( m_Mode == DIRECTED ) {
-            PushDirected(tail,head);
+            PushDirected(internalTail,internalHead);
+        }
+
+        if( m_NumInBatch < m_BatchSize ) {
+            m_Batch[m_NumInBatch].m_Tail = internalTail;
+            m_Batch[m_NumInBatch].m_Head = internalHead;
+            m_NumInBatch++;
+        } else {
+            std::cout << "Processing batch ..." << std::endl;
+            m_Processor( m_Batch, m_NumInBatch ); 
+            m_NumInBatch = 0;
+        }
+
+        m_NumPushedEdges++;
+        if( m_NumPushedEdges % 10000  == 0 ) {
+            std::cout << "Number of edges read: " << m_NumPushedEdges << std::endl;
+            std::cout << "\t " << m_BufferPool.NumFreeBuffers() << "/" << m_BufferPool.MaxNumBuffers() << std::endl;
         }
     }
 
+    StreamGraph::AdjacencyIterator StreamGraph::Iterator( const unsigned int nodeId ) {
+       AdjacencyList* list = NULL;
+       if( nodeId < m_NextId ) {
+           list = m_Adjacencies[nodeId];
+       }
+
+       AdjacencyIterator iterator( list );
+       return iterator;
+    }
+
+    unsigned int StreamGraph::NumNodes() {
+        return m_NextId;
+    }
+
+
     void StreamGraph::PushDirected( const unsigned int tail, const unsigned int head, const double weight ) {
-        unsigned int internalTail = GetInternalId(tail);
-        unsigned int internalHead = GetInternalId(head);
-        InsertAdjacency(*itTail,*itHead);
+        InsertAdjacency(tail, head);
     }
 
     void StreamGraph::PushUndirected( const unsigned int tail, const unsigned int head, const double weight ) {
-        unsigned int internalTail = GetInternalId(tail);
-        unsigned int internalHead = GetInternalId(head);
-        InsertAdjacency(internalTail, internalHead);
-        InsertAdjacency(internalHead, internalId);
+        InsertAdjacency(tail, head);
+        InsertAdjacency(tail, head);
     }
 
-    AdjacencyPage* GetNewPage() {
+    StreamGraph::AdjacencyPage* StreamGraph::GetNewPage() {
         void* buffer = m_BufferPool.NextBuffer();
         if( buffer == NULL ) {
-            AdjacencyPage* page = m_Pages.front();
+            StreamGraph::AdjacencyPage* page = m_Pages.front();
             m_Pages.pop_front();
             unsigned int id = page->m_NodeId;
             if( m_Adjacencies[id]->m_First == page ) {
@@ -157,33 +215,32 @@ namespace flowing {
 
     
     unsigned int StreamGraph::GetInternalId( const unsigned int id ) {
-        UMap::iterator it = m_Map.find(id);
-        if( it == m_Map.end() ) {
-            it = m_Map.insert(std::pair<unsigned int, unsigned int>( id, m_Next++ ));
+        UUMap::iterator it = m_Map.find(id);
+        if( it == m_Map.end() ) {   // If this is a new node, assign an internal id and initialize its adjacency list.
+            it = m_Map.insert(std::pair<unsigned int, unsigned int>( id, m_NextId++ )).first;;
             m_Remap.push_back(id);
             AdjacencyList* list = AllocateAdjacencyList();
             m_Adjacencies.push_back(list);            
         }
-        return *it;
+        return (*it).second;
     }
 
     void StreamGraph::InsertAdjacency( const unsigned int tail, const unsigned int head ) {
         AdjacencyList* listTail = m_Adjacencies[tail];    
-        if( listTail->m_First == NULL ) {
+        if( listTail->m_First == NULL ) {           // Check if the list do not have any page.
             listTail->m_First = GetNewPage(); 
             listTail->m_First->m_NodeId = tail;
             listTail->m_Last = listTail->m_First;
         }
 
-        if( listTail->m_Last->m_NumAdjacencies == listTail->m_Last->m_MaxAdjacencies ) {
+        if( listTail->m_Last->m_NumAdjacencies == listTail->m_Last->m_MaxAdjacencies ) {    // Check if we need a new page for the list.
             AdjacencyPage* newPage  = GetNewPage(); // IMPORTANT: GetNewPage can modify the address pointed by listTail->m_Last.
             listTail->m_Last->m_Next = newPage;
             newPage->m_Previous = listTail->m_Last;
             listTail->m_Last = newPage;
             listTail->m_Last->m_NodeId = tail;
-        }
-
-        listTail->m_Last->m_Buffer[listTail->m_NumAdjacencies++] = head;
+       }
+        listTail->m_Last->m_Buffer[listTail->m_Last->m_NumAdjacencies++] = head;
         listTail->m_Degree++;
     }
 }

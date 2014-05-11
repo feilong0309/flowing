@@ -15,9 +15,12 @@
 #ifndef STREAM_GRAPH_H
 #define STREAM_GRAPH_H
 
-#include "PagePool.h"
-#include <ifstream>
+#include "BufferPool.h"
+#include "Types.h"
+#include <iostream>
 #include <vector>
+#include <map>
+#include <list>
 
 
 namespace flowing {
@@ -64,20 +67,43 @@ typedef std::vector<unsigned int> UVector;
 
             /** @brief Allocated an AdjacencyList.
                 @return The allocated AdjacencyList.*/
-            AdjacencyList* AllocateAdjacencList();
+            AdjacencyList* AllocateAdjacencyList();
 
             /** @brief Frees an AdjacencyPage.
                 @param[in] adjacencyList The AdjacencyList to free*/
-            void             FreeAdjacencyPage( AdjacencyList* adjacencyList );
+            void             FreeAdjacencyList( AdjacencyList* adjacencyList );
 
         public:
+
+            class AdjacencyIterator {
+                public:
+                    ~AdjacencyIterator();
+
+                    /** @brief Tells if there are more adjacencies to look at.
+                     *  @return true if there are more adjacencies. false otherwise.*/
+                    bool HasNext();
+
+                    /** @brief Get the next adjacency of this iterator.
+                     *  @param The next adjacency.*/
+                    unsigned int Next();
+
+                private:
+                    friend class StreamGraph;
+                    AdjacencyIterator( const AdjacencyList* adjacencyList );
+
+                    const AdjacencyList* const m_AdjacencyList;   /**< @brief The adjacency list to iterate.*/
+                    const AdjacencyPage* m_CurrentPage;           /**< @brief The current page in the adjacency list being iterated.*/
+                    int m_CurrentIndex;                           /**< @brief The current index into the page being iterated.*/
+                    
+            };
+
 
             enum EdgeMode {
                 UNDIRECTED,
                 DIRECTED
             };
 
-            StreamGraph( const EdgeMode mode );
+            StreamGraph( const EdgeMode mode, void (*function)(Edge*,int), int batchSize );
             ~StreamGraph();
 
             /** @brief Initializes the stream graph.
@@ -89,13 +115,23 @@ typedef std::vector<unsigned int> UVector;
 
             /** @brief Pushes all the edges (tail,head) pairs that arrive from an input stream.
                 @param[in] stream The stream to read from. */
-            void Push( std::ifstream& stream );
+            void Push( std::istream& stream );
 
             /** @brief Pushes an edge.
                 @param[in] tail The tail of the edge.
                 @param[in] head The head of the edge.
                 @param[in] weight The weight of the edge.*/
             void Push( const unsigned int tail, const unsigned int head, const double weight = 1.0 );
+
+            /** @brief Gets the adjacency iterator of a given node.
+             *  @param[in] The node to get the adjacency iterator.
+             *  @return The adjacency iterator.*/
+            AdjacencyIterator Iterator( const unsigned int nodeId );
+
+            /** @brief Gets the number of nodes in the graph.
+             *  @return The number of nodes.*/
+            unsigned int NumNodes();
+
 
         private:
 
@@ -126,13 +162,18 @@ typedef std::vector<unsigned int> UVector;
                 @return The internal id.*/
             unsigned int GetInternalId( const unsigned int id );
 
-            int                                     m_NextId;       /**< @brief The next new identifier to assign.*/
-            EdgeMode                                m_Mode;         /**< @brief The mode of the graph (DIRECTED or UNDIRECTED).*/
-            BufferPool                              m_BufferPool;   /**< @brief The buffer pool.*/
-            std::vector<AdjacencyList*>             m_Adjacencies;  /**< @brief The graph adjacencies.*/
-            std::list<AdjacencyPage*>               m_Pages;        /**< @brief A list of pages in LRU to decide which to remove.*/
-            UUMap                                   m_Map;          /**< @brief The old to new identifier map.*/
-            UVector                                 m_Remap;        /**< @brief The new to old identifier map.*/
+            int                                     m_NumPushedEdges;   /**< @brief The number of pushed edges into the graph.*/
+            int                                     m_NextId;           /**< @brief The next new identifier to assign.*/
+            EdgeMode                                m_Mode;             /**< @brief The mode of the graph (DIRECTED or UNDIRECTED).*/
+            BufferPool                              m_BufferPool;       /**< @brief The buffer pool.*/
+            std::vector<AdjacencyList*>             m_Adjacencies;      /**< @brief The graph adjacencies.*/
+            std::list<AdjacencyPage*>               m_Pages;            /**< @brief A list of pages in LRU to decide which to remove.*/
+            UUMap                                   m_Map;              /**< @brief The old to new identifier map.*/
+            UVector                                 m_Remap;            /**< @brief The new to old identifier map.*/
+            void (*m_Processor)( Edge*, int );                          /**< @brief Function pointer to the function used to process the edges.*/
+            int                                     m_BatchSize;        /**< @brief The size of the batch to process.*/ 
+            int                                     m_NumInBatch;       /**< @brief The number of elements in the batch.*/
+            Edge*                                   m_Batch;
     };
 
 }
