@@ -103,7 +103,11 @@ typedef std::vector<unsigned int> UVector;
                 DIRECTED
             };
 
-            StreamGraph( const EdgeMode mode, void (*function)(Edge*,int), int batchSize );
+            StreamGraph(    const EdgeMode mode, 
+                            void (*processor)( StreamGraph*, Edge*,int), 
+                            void* (*nodeDataAllocate)( const StreamGraph*, unsigned int ),
+                            void (*nodeDataFree)( const StreamGraph*, unsigned int, void* ),
+                            int batchSize );
             ~StreamGraph();
 
             /** @brief Initializes the stream graph.
@@ -126,11 +130,20 @@ typedef std::vector<unsigned int> UVector;
             /** @brief Gets the adjacency iterator of a given node.
              *  @param[in] The node to get the adjacency iterator.
              *  @return The adjacency iterator.*/
-            AdjacencyIterator Iterator( const unsigned int nodeId );
+            AdjacencyIterator Iterator( const unsigned int nodeId ) const;
 
             /** @brief Gets the number of nodes in the graph.
              *  @return The number of nodes.*/
-            unsigned int NumNodes();
+            unsigned int NumNodes() const;
+
+            /** @brief Gets the node data associated with a node.
+             *  @param[in] id The node id.
+             *  @return The node data.*/
+            void* GetNodeData( unsigned int id );
+
+            /** @brief Sets the node data associated with a node.
+             *  @param[in] id The node id.*/
+            void SetNodeData( unsigned int id, void* nodeData );
 
 
         private:
@@ -167,13 +180,16 @@ typedef std::vector<unsigned int> UVector;
             EdgeMode                                m_Mode;             /**< @brief The mode of the graph (DIRECTED or UNDIRECTED).*/
             BufferPool                              m_BufferPool;       /**< @brief The buffer pool.*/
             std::vector<AdjacencyList*>             m_Adjacencies;      /**< @brief The graph adjacencies.*/
+            std::vector<void*>                      m_NodeData;         /**< @brief The node data.*/
             std::list<AdjacencyPage*>               m_Pages;            /**< @brief A list of pages in LRU to decide which to remove.*/
             UUMap                                   m_Map;              /**< @brief The old to new identifier map.*/
             UVector                                 m_Remap;            /**< @brief The new to old identifier map.*/
-            void (*m_Processor)( Edge*, int );                          /**< @brief Function pointer to the function used to process the edges.*/
             int                                     m_BatchSize;        /**< @brief The size of the batch to process.*/ 
             int                                     m_NumInBatch;       /**< @brief The number of elements in the batch.*/
-            Edge*                                   m_Batch;
+            Edge*                                   m_Batch;            /**< @brief The current batch of edges.*/
+            void (*m_Processor)( StreamGraph* graph, Edge*, int );                          /**< @brief Function pointer to the function used to process the edges.*/
+            void* (*m_NodeDataAllocate)( const StreamGraph* graph, unsigned int );                /**< @brief This function is used to allocate the node data associated with each node.*/
+            void (*m_NodeDataFree)( const StreamGraph* graph, unsigned int, void* );              /**< @brief This function is used to free the node data associated with each node.*/
     };
 
 }

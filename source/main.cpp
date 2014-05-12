@@ -12,15 +12,33 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <iostream>
 #include "Flowing.h"
+#include "Community.h"
+#include <iostream>
 
-void process( flowing::Edge* edge, int numEdges ) {
+
+void process( flowing::StreamGraph* graph, flowing::Edge* edge, int numEdges ) {
+    for( int i = 0; i < numEdges; ++i ) {
+        flowing::Community* tailCommunity = static_cast<flowing::Community*>(graph->GetNodeData( edge[i].m_Tail ));
+        flowing::Community* headCommunity = static_cast<flowing::Community*>(graph->GetNodeData( edge[i].m_Head ));
+    }
+}
+
+void* nodeDataAllocate( const flowing::StreamGraph* graph, unsigned int nodeId ) {
+    return (void*) new flowing::Community( nodeId );
+}
+
+void nodeDataFree( const flowing::StreamGraph* graph, unsigned int nodeId, void* nodeData ) {
+    delete (flowing::Community*) nodeData;
 }
 
 int main( int argc, char** argv ) {
 
-    flowing::StreamGraph graph( flowing::StreamGraph::UNDIRECTED, process, 1024 );
+    flowing::StreamGraph graph( flowing::StreamGraph::UNDIRECTED, 
+                                process, 
+                                nodeDataAllocate,
+                                nodeDataFree,
+                                1024 );
     if(!graph.Initialize()) {
         std::cout << "ERROR: Unable to initialize the stream graph." << std::endl;
         return 1;
@@ -32,7 +50,6 @@ int main( int argc, char** argv ) {
         while( it.HasNext() ) {
             it.Next();
         }
-
         i % 10000 == 0 ? std::cout << "Iterated over " << i << " nodes" << std::endl : (void*)0;
     }
     graph.Close();
