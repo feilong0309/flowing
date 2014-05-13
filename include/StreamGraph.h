@@ -105,8 +105,8 @@ typedef std::vector<unsigned int> UVector;
 
             StreamGraph(    const EdgeMode mode, 
                             void (*processor)( StreamGraph*, Edge*,int), 
-                            void* (*nodeDataAllocate)( const StreamGraph*, unsigned int ),
-                            void (*nodeDataFree)( const StreamGraph*, unsigned int, void* ),
+                            void* (*nodeDataAllocate)( StreamGraph*, unsigned int ),
+                            void (*nodeDataFree)( StreamGraph*, unsigned int, void* ),
                             int batchSize );
             ~StreamGraph();
 
@@ -145,6 +145,11 @@ typedef std::vector<unsigned int> UVector;
              *  @param[in] id The node id.*/
             void SetNodeData( unsigned int id, void* nodeData );
 
+            /** @brief Gets the original id of a node.
+             *  @param[in] id The id of the node.
+             *  @return The id of the node.*/
+            unsigned int Remap( unsigned int id );
+
 
         private:
 
@@ -160,7 +165,6 @@ typedef std::vector<unsigned int> UVector;
                 @param[in] head The head of the edge.
                 @param[in] weight The weight of the edge.*/
             void PushUndirected( const unsigned int tail, const unsigned int head, const double weight = 1.0 );
-
 
             /** @brief Inserts an adjacency.
                 @param[in] tail The tail of the edge.
@@ -188,8 +192,8 @@ typedef std::vector<unsigned int> UVector;
             int                                     m_NumInBatch;       /**< @brief The number of elements in the batch.*/
             Edge*                                   m_Batch;            /**< @brief The current batch of edges.*/
             void (*m_Processor)( StreamGraph* graph, Edge*, int );                          /**< @brief Function pointer to the function used to process the edges.*/
-            void* (*m_NodeDataAllocate)( const StreamGraph* graph, unsigned int );                /**< @brief This function is used to allocate the node data associated with each node.*/
-            void (*m_NodeDataFree)( const StreamGraph* graph, unsigned int, void* );              /**< @brief This function is used to free the node data associated with each node.*/
+            void* (*m_NodeDataAllocate)( StreamGraph* graph, unsigned int );                /**< @brief This function is used to allocate the node data associated with each node.*/
+            void (*m_NodeDataFree)( StreamGraph* graph, unsigned int, void* );              /**< @brief This function is used to free the node data associated with each node.*/
     };
 
 }

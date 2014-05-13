@@ -91,8 +91,8 @@ namespace flowing {
 
     StreamGraph::StreamGraph(   const EdgeMode mode, 
                                 void (*processor)( StreamGraph* graph, Edge*,int),
-                                void* (*nodeDataAllocate)( const StreamGraph* graph, unsigned int ),
-                                void (*nodeDataFree)( const StreamGraph* graph, unsigned int, void* ),
+                                void* (*nodeDataAllocate)(  StreamGraph* graph, unsigned int ),
+                                void (*nodeDataFree)( StreamGraph* graph, unsigned int, void* ),
                                 int batchSize ) :
         m_BufferPool( FLOWING_NUM_PAGES, FLOWING_PAGE_SIZE ) {
         m_Mode = mode;
@@ -117,7 +117,7 @@ namespace flowing {
 
     void StreamGraph::Close() {
         if(m_NumInBatch > 0) {
-            std::cout << "Processing batch ..." << std::endl;
+          //  std::cout << "Processing batch ..." << std::endl;
             m_Processor( this, m_Batch, m_NumInBatch);
         }
 
@@ -157,7 +157,7 @@ namespace flowing {
             m_Batch[m_NumInBatch].m_Head = internalHead;
             m_NumInBatch++;
         } else {
-            std::cout << "Processing batch ..." << std::endl;
+//            std::cout << "Processing batch ..." << std::endl;
             m_Processor( this, m_Batch, m_NumInBatch ); 
             m_NumInBatch = 0;
         }
@@ -189,6 +189,10 @@ namespace flowing {
 
     void StreamGraph::SetNodeData( unsigned int id, void* nodeData ) {
         m_NodeData[id] = nodeData;
+    }
+
+    unsigned int StreamGraph::Remap( unsigned int id ) {
+        return m_Remap[id];
     }
 
     void StreamGraph::PushDirected( const unsigned int tail, const unsigned int head, const double weight ) {
@@ -241,11 +245,12 @@ namespace flowing {
     unsigned int StreamGraph::GetInternalId( const unsigned int id ) {
         UUMap::iterator it = m_Map.find(id);
         if( it == m_Map.end() ) {                                                           // If this is a new node, assign an internal id and initialize its adjacency list.
-            it = m_Map.insert(std::pair<unsigned int, unsigned int>( id, m_NextId++ )).first;;
+            it = m_Map.insert(std::pair<unsigned int, unsigned int>( id, m_NextId )).first;;
             m_Remap.push_back(id);
             AdjacencyList* list = AllocateAdjacencyList();
             m_Adjacencies.push_back(list);            
-            m_NodeData.push_back(m_NodeDataAllocate( this, id));
+            m_NodeData.push_back( m_NodeDataAllocate( this, m_NextId ) );
+            m_NextId++;
         }
         return (*it).second;
     }

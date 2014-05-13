@@ -15,21 +15,59 @@
 #include "Flowing.h"
 #include "Community.h"
 #include <iostream>
+#include <fstream>
 
+std::ofstream outputFile;
 
-void process( flowing::StreamGraph* graph, flowing::Edge* edge, int numEdges ) {
-    for( int i = 0; i < numEdges; ++i ) {
-        flowing::Community* tailCommunity = static_cast<flowing::Community*>(graph->GetNodeData( edge[i].m_Tail ));
-        flowing::Community* headCommunity = static_cast<flowing::Community*>(graph->GetNodeData( edge[i].m_Head ));
+void* nodeDataAllocate( flowing::StreamGraph* graph, unsigned int nodeId ) {
+    return static_cast<void*>(new flowing::Community( graph, nodeId ));
+}
+
+void nodeDataFree( flowing::StreamGraph* graph, unsigned int nodeId, void* nodeData ) {
+   flowing::Community* community = (flowing::Community*) nodeData;
+    if( community != NULL ) {
+        if( (community->Size() > 0) ) {
+            // print
+            flowing::Community::CommunityIterator iterCom = community->Iterator();
+            while( iterCom.HasNext() ) {
+                unsigned int node = iterCom.Next();
+                outputFile << graph->Remap( node ); 
+                if( iterCom.HasNext() ) outputFile << " ";
+                graph->SetNodeData( node, NULL );
+            }
+            outputFile << std::endl;
+        } 
+        delete community;
     }
 }
 
-void* nodeDataAllocate( const flowing::StreamGraph* graph, unsigned int nodeId ) {
-    return (void*) new flowing::Community( nodeId );
-}
-
-void nodeDataFree( const flowing::StreamGraph* graph, unsigned int nodeId, void* nodeData ) {
-    delete (flowing::Community*) nodeData;
+void process( flowing::StreamGraph* graph, flowing::Edge* edges, int numEdges ) {
+    for( int i = 0; i < numEdges; ++i ) {
+        unsigned int tail = edges[i].m_Tail;
+        unsigned int head = edges[i].m_Head;
+        flowing::Community* tailCommunity = static_cast<flowing::Community*>(graph->GetNodeData( tail ));
+        flowing::Community* headCommunity = static_cast<flowing::Community*>(graph->GetNodeData( head ));
+        if( tailCommunity->Id() != headCommunity->Id() ) {
+            double currentStore = tailCommunity->Score() + headCommunity->Score(); 
+            double tailToHead = tailCommunity->TestRemove( tail ) + headCommunity->TestInsert( tail );
+            double headToTail = tailCommunity->TestInsert( head ) + headCommunity->TestRemove( head );
+            if( ( currentStore < headToTail ) || ( currentStore < tailToHead ) ) {
+                if( tailToHead > headToTail ) {
+                    tailCommunity->Remove( tail );
+                    headCommunity->Insert( tail );
+                    if( tailCommunity->Size() == 0)
+                        nodeDataFree( graph, tail, tailCommunity );
+                    graph->SetNodeData( tail, headCommunity );
+                } else {
+                    headCommunity->Remove( head );
+                    tailCommunity->Insert( head );
+                    if( headCommunity->Size() == 0)
+                        nodeDataFree( graph, head, headCommunity );
+                    graph->SetNodeData( head, tailCommunity );
+                }
+            }
+        }
+    }
 }
 
 int main( int argc, char** argv ) {
@@ -44,7 +82,8 @@ int main( int argc, char** argv ) {
         return 1;
     }
     graph.Push(std::cin);
-    unsigned int numNodes = graph.NumNodes();
+    outputFile.open("communities.dat");
+/*    unsigned int numNodes = graph.NumNodes();
     for( unsigned int i = 0; i < numNodes; ++i ) {
         flowing::StreamGraph::AdjacencyIterator it = graph.Iterator(i);
         while( it.HasNext() ) {
@@ -52,9 +91,8 @@ int main( int argc, char** argv ) {
         }
         i % 10000 == 0 ? std::cout << "Iterated over " << i << " nodes" << std::endl : (void*)0;
     }
+    */
     graph.Close();
     return 0;
 }
-
-
 
