@@ -20,7 +20,9 @@
 std::ofstream outputFile;
 
 void* nodeDataAllocate( flowing::StreamGraph* graph, unsigned int nodeId ) {
-    return static_cast<void*>(new flowing::Community( graph, nodeId ));
+    flowing::Community* community = new flowing::Community( graph, nodeId );
+    community->Insert(nodeId);
+    return static_cast<void*>( community );
 }
 
 void nodeDataFree( flowing::StreamGraph* graph, unsigned int nodeId, void* nodeData ) {
@@ -47,7 +49,7 @@ void process( flowing::StreamGraph* graph, flowing::Edge* edges, int numEdges ) 
         unsigned int head = edges[i].m_Head;
         flowing::Community* tailCommunity = static_cast<flowing::Community*>(graph->GetNodeData( tail ));
         flowing::Community* headCommunity = static_cast<flowing::Community*>(graph->GetNodeData( head ));
-        if( tailCommunity->Id() != headCommunity->Id() ) {
+        if( tailCommunity != headCommunity ) {
             double currentStore = tailCommunity->Score() + headCommunity->Score(); 
             double tailToHead = tailCommunity->TestRemove( tail ) + headCommunity->TestInsert( tail );
             double headToTail = tailCommunity->TestInsert( head ) + headCommunity->TestRemove( head );
@@ -66,6 +68,8 @@ void process( flowing::StreamGraph* graph, flowing::Edge* edges, int numEdges ) 
                     graph->SetNodeData( head, tailCommunity );
                 }
             }
+        }  else {
+
         }
     }
 }

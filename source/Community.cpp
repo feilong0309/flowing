@@ -47,7 +47,6 @@ namespace flowing {
         m_Graph( graph ),
         m_Kin( 0 ), 
         m_Kout( 0 ) {
-            m_Nodes.insert(id);
     }
 
     Community::~Community() {
@@ -131,7 +130,9 @@ namespace flowing {
 
     double Community::Score() const {
         int denom = m_Kin + m_Kout + (Size()+1)*(Size()) - m_Kin;
-        return denom > 0 ? m_Kin / (double)denom : 0;
+        double score = denom > 0 ? m_Kin / (double)denom : 0;
+//        assert((score <= 1.0) && (score >= 0.0));
+        return score;
     }
 
     unsigned int Community::Id() const {
