@@ -3,7 +3,7 @@ flowing
 
 Stream community detection for large graphs
 
-=== Compilation ===
+===Compilation===
 
 Execute the following comands inside the flowing root folder:
 
@@ -14,7 +14,7 @@ $ cmake -DCMAKE_BUILD_TYPE=Release ..
 $ make
 ```
 
-=== Execution ===
+===Execution===
 
 ```
 $ cd build
