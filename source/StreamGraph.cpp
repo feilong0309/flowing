@@ -15,6 +15,7 @@
 #include "Types.h"
 #include "StreamGraph.h"
 #include <cstdlib>
+#include <assert.h>
 
 namespace flowing {
 
@@ -265,9 +266,15 @@ namespace flowing {
 
         if( listTail->m_Last->m_NumAdjacencies == listTail->m_Last->m_MaxAdjacencies ) {    // Check if we need a new page for the list.
             AdjacencyPage* newPage  = GetNewPage();                                         // IMPORTANT: GetNewPage can modify the address pointed by listTail->m_Last.
-            listTail->m_Last->m_Next = newPage;
-            newPage->m_Previous = listTail->m_Last;
-            listTail->m_Last = newPage;
+            if( listTail->m_Last == NULL ) {
+                assert(listTail->m_First == NULL);
+                listTail->m_First = listTail->m_Last = newPage;
+                listTail->m_First->m_Next = listTail->m_First->m_Previous = NULL;
+            } else {
+                listTail->m_Last->m_Next = newPage;
+                newPage->m_Previous = listTail->m_Last;
+                listTail->m_Last = newPage;
+            }
             listTail->m_Last->m_NodeId = tail;
        }
         listTail->m_Last->m_Buffer[listTail->m_Last->m_NumAdjacencies++] = head;
