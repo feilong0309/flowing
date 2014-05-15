@@ -47,6 +47,7 @@ namespace flowing {
         m_Graph( graph ),
         m_Kin( 0 ), 
         m_Kout( 0 ) {
+            m_Nodes.insert( id );
     }
 
     Community::~Community() {
@@ -64,6 +65,8 @@ namespace flowing {
         m_Nodes.insert( id );
         m_Kin = newKin;
         m_Kout = newKout;
+        assert( m_Kin >= 0 );
+        assert( m_Kout >= 0 );
     }
 
     void Community::Remove( unsigned int id ) {
@@ -74,6 +77,8 @@ namespace flowing {
         m_Nodes.erase( id );
         m_Kin = newKin;
         m_Kout = newKout;
+        assert( m_Kin >= 0 );
+        assert( m_Kout >= 0 );
     }
 
     int Community::Size() const {
@@ -87,6 +92,7 @@ namespace flowing {
         StreamGraph::AdjacencyIterator iterNode = m_Graph->Iterator( nodeId );
         while( iterNode.HasNext() ) {
             unsigned int neighbor = iterNode.Next();
+            assert( neighbor != nodeId );
             if( Exists( neighbor ) ) ++nodeKin;
             else ++nodeKout;
         }
@@ -103,16 +109,20 @@ namespace flowing {
         int nodeKin = 0;
         int nodeKout = 0;
         StreamGraph::AdjacencyIterator iterNode = m_Graph->Iterator( nodeId );
+//        std::cout << "NEIGHBORS node " << nodeId;
         while( iterNode.HasNext() ) {
             unsigned int neighbor = iterNode.Next();
+            assert( neighbor != nodeId );
+ //           std::cout << " " << neighbor;
             if( Exists( neighbor ) ) ++nodeKin;
             else ++nodeKout;
         }
+  //      std::cout << std::endl;;
         // New score
         newKin = m_Kin - 2*nodeKin;
         newKout = m_Kout + nodeKin;
         newKout -= nodeKout;
-        int denom = newKin + newKout + (this->Size()+1)*(this->Size()) - newKin;
+        int denom = newKin + newKout + (this->Size()-1)*(this->Size()-2) - newKin;
         return denom > 0 ? newKin / (double)denom : 0;
     }
 
@@ -131,7 +141,7 @@ namespace flowing {
     double Community::Score() const {
         int denom = m_Kin + m_Kout + (Size()+1)*(Size()) - m_Kin;
         double score = denom > 0 ? m_Kin / (double)denom : 0;
-//        assert((score <= 1.0) && (score >= 0.0));
+        assert((score <= 1.0) && (score >= 0.0));
         return score;
     }
 
@@ -141,5 +151,23 @@ namespace flowing {
 
     Community::CommunityIterator Community::Iterator() const {
         return CommunityIterator( this );
+    }
+
+    void Community::SignalInsertInternalEdge() {
+        m_Kin += 2;
+        assert( m_Kin >= 0 );
+    }
+
+    void Community::SignalInsertExternalEdge() {
+        m_Kout += 1;
+    }
+
+    void Community::SignalRemoveInternalEdge() {
+        m_Kin -= 2;
+        assert( m_Kin >= 0 );
+    }
+
+    void Community::SignalRemoveExternalEdge() {
+        m_Kout -= 1;
     }
 }

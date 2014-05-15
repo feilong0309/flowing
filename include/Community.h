@@ -88,6 +88,11 @@ namespace flowing {
              * @return An iterator of the community.*/ 
             CommunityIterator Iterator() const;
 
+            void SignalInsertInternalEdge();
+            void SignalInsertExternalEdge();
+            void SignalRemoveInternalEdge();
+            void SignalRemoveExternalEdge();
+
         private:
 
             /** @brief Tests the score of the community if a node is inserted.
